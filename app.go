@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 
@@ -75,7 +76,24 @@ func (app *App) callBackHandler(w http.ResponseWriter, r *http.Request) {
 	log.Println(tok.Expiry)
 	log.Println(tok.TokenType)
 
-	client := app.oauthConfig.Client(context.TODO(), tok)
-	log.Println(client.Get("https://api.github.com/user"))
+	// get user information
+	cli := &http.Client{}
+	req, err := http.NewRequest("GET", "https://api.github.com/user", nil)
+	bearToken := "Bearer " + tok.AccessToken
+	log.Println(bearToken)
+
+	req.Header.Add("Authorization", bearToken)
+	log.Println(req, err)
+
+	resp, err := cli.Do(req)
+
+	log.Println(resp, err)
+
+	body, err := io.ReadAll(resp.Body) // Read the content
+	if err != nil {
+		// Handle error
+	}
+	log.Println(string(body))
+
 	http.Redirect(w, r, "/", http.StatusTemporaryRedirect)
 }
