@@ -1,1 +1,5 @@
+#export secrets
 env.sh
+
+# Build artifacts
+build/
