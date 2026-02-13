@@ -4,6 +4,8 @@
 package tests
 
 import (
+	"cito/server/model"
+	"cito/server/service"
 	"context"
 	"database/sql"
 	"testing"
@@ -16,88 +18,6 @@ import (
 	"github.com/testcontainers/testcontainers-go/modules/postgres"
 	"github.com/testcontainers/testcontainers-go/wait"
 )
-
-// GitHubUser represents a GitHub user (copied from main package for tests)
-type GitHubUser struct {
-	ID    int64  `json:"id"`
-	Login string `json:"login"`
-	Email string `json:"email"`
-}
-
-// UserService provides user operations (copied from main package for tests)
-type UserService struct {
-	db *sql.DB
-}
-
-// NewUserService creates a new UserService
-func NewUserService(db *sql.DB) *UserService {
-	return &UserService{db: db}
-}
-
-// UpsertUser inserts or updates a user based on GitHub ID
-func (us *UserService) UpsertUser(githubUser GitHubUser, accessToken string) (string, error) {
-	sessionToken, err := generateSessionToken()
-	if err != nil {
-		return "", err
-	}
-
-	query := `
-		INSERT INTO users (github_id, username, email, access_token, session_token)
-		VALUES ($1, $2, $3, $4, $5)
-		ON CONFLICT (github_id)
-		DO UPDATE SET
-			username = EXCLUDED.username,
-			email = EXCLUDED.email,
-			access_token = EXCLUDED.access_token,
-			session_token = EXCLUDED.session_token
-		RETURNING session_token
-	`
-
-	var returnedToken string
-	err = us.db.QueryRow(query, githubUser.ID, githubUser.Login, githubUser.Email, accessToken, sessionToken).Scan(&returnedToken)
-	if err != nil {
-		return "", err
-	}
-
-	return returnedToken, nil
-}
-
-// FindUserBySession looks up a user by their session token
-func (us *UserService) FindUserBySession(sessionToken string) (*UserModel, error) {
-	query := `SELECT id, github_id, username, email, access_token, session_token FROM users WHERE session_token = $1`
-
-	var user UserModel
-	err := us.db.QueryRow(query, sessionToken).Scan(
-		&user.ID,
-		&user.GithubID,
-		&user.Username,
-		&user.Email,
-		&user.AccessToken,
-		&user.SessionToken,
-	)
-
-	if err != nil {
-		return nil, err
-	}
-
-	return &user, nil
-}
-
-// UserModel represents a user in the database
-type UserModel struct {
-	ID           int
-	GithubID     int64
-	Username     string
-	Email        string
-	AccessToken  string
-	SessionToken string
-}
-
-// generateSessionToken creates a random hex session token (simplified version)
-func generateSessionToken() (string, error) {
-	// For integration tests, use timestamp-based tokens to ensure uniqueness
-	return time.Now().Format("20060102150405.999999999"), nil
-}
 
 // setupTestDB creates a PostgreSQL test container and returns a connection
 func setupTestDB(t *testing.T) (*sql.DB, func()) {
@@ -157,9 +77,9 @@ func TestIntegration_UserService_UpsertUser(t *testing.T) {
 	db, cleanup := setupTestDB(t)
 	defer cleanup()
 
-	us := NewUserService(db)
+	us := service.NewUserService(db)
 
-	githubUser := GitHubUser{
+	githubUser := model.GitHubUser{
 		ID:    12345,
 		Login: "testuser",
 		Email: "test@example.com",
@@ -183,7 +103,7 @@ func TestIntegration_UserService_UpsertUser(t *testing.T) {
 		require.NoError(t, err)
 
 		// Second upsert with same GitHub ID but different data
-		updatedUser := GitHubUser{
+		updatedUser := model.GitHubUser{
 			ID:    12345, // Same GitHub ID
 			Login: "updateduser",
 			Email: "updated@example.com",
@@ -214,10 +134,10 @@ func TestIntegration_UserService_FindUserBySession(t *testing.T) {
 	db, cleanup := setupTestDB(t)
 	defer cleanup()
 
-	us := NewUserService(db)
+	us := service.NewUserService(db)
 
 	// Insert a test user
-	githubUser := GitHubUser{
+	githubUser := model.GitHubUser{
 		ID:    99999,
 		Login: "sessiontestuser",
 		Email: "session@example.com",
@@ -253,10 +173,10 @@ func TestIntegration_SessionTokenUniqueness(t *testing.T) {
 	db, cleanup := setupTestDB(t)
 	defer cleanup()
 
-	us := NewUserService(db)
+	us := service.NewUserService(db)
 
 	// Create multiple users
-	users := []GitHubUser{
+	users := []model.GitHubUser{
 		{ID: 1001, Login: "user1", Email: "user1@example.com"},
 		{ID: 1002, Login: "user2", Email: "user2@example.com"},
 		{ID: 1003, Login: "user3", Email: "user3@example.com"},
@@ -282,10 +202,10 @@ func TestIntegration_DatabaseConstraints(t *testing.T) {
 	db, cleanup := setupTestDB(t)
 	defer cleanup()
 
-	us := NewUserService(db)
+	us := service.NewUserService(db)
 
 	t.Run("github_id unique constraint enforced", func(t *testing.T) {
-		githubUser := GitHubUser{
+		githubUser := model.GitHubUser{
 			ID:    5555,
 			Login: "constrainttest",
 			Email: "constraint@example.com",
@@ -310,8 +230,8 @@ func TestIntegration_DatabaseConstraints(t *testing.T) {
 	t.Run("session_token unique constraint enforced", func(t *testing.T) {
 		// This is implicitly tested by the upsert mechanism
 		// Session tokens are regenerated on each upsert, ensuring uniqueness
-		user1 := GitHubUser{ID: 6001, Login: "user1", Email: "user1@test.com"}
-		user2 := GitHubUser{ID: 6002, Login: "user2", Email: "user2@test.com"}
+		user1 := model.GitHubUser{ID: 6001, Login: "user1", Email: "user1@test.com"}
+		user2 := model.GitHubUser{ID: 6002, Login: "user2", Email: "user2@test.com"}
 
 		token1, err := us.UpsertUser(user1, "token")
 		require.NoError(t, err)
@@ -327,7 +247,7 @@ func TestIntegration_ConcurrentOperations(t *testing.T) {
 	db, cleanup := setupTestDB(t)
 	defer cleanup()
 
-	us := NewUserService(db)
+	us := service.NewUserService(db)
 
 	// Test concurrent upserts of different users
 	t.Run("concurrent upserts of different users", func(t *testing.T) {
@@ -335,7 +255,7 @@ func TestIntegration_ConcurrentOperations(t *testing.T) {
 
 		for i := 0; i < 5; i++ {
 			go func(id int) {
-				user := GitHubUser{
+				user := model.GitHubUser{
 					ID:    int64(7000 + id),
 					Login: "concurrent" + string(rune('a'+id)),
 					Email: "concurrent@test.com",
@@ -363,10 +283,10 @@ func TestIntegration_FullUserLifecycle(t *testing.T) {
 	db, cleanup := setupTestDB(t)
 	defer cleanup()
 
-	us := NewUserService(db)
+	us := service.NewUserService(db)
 
 	// Complete user lifecycle: create, update, find
-	githubUser := GitHubUser{
+	githubUser := model.GitHubUser{
 		ID:    8888,
 		Login: "lifecycleuser",
 		Email: "lifecycle@example.com",
@@ -385,7 +305,7 @@ func TestIntegration_FullUserLifecycle(t *testing.T) {
 	assert.Equal(t, "initial_token", foundUser.AccessToken)
 
 	// Step 3: Update user (new login session)
-	updatedGithubUser := GitHubUser{
+	updatedGithubUser := model.GitHubUser{
 		ID:    8888, // Same ID
 		Login: "lifecycleuser_updated",
 		Email: "lifecycle_updated@example.com",

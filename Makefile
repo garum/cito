@@ -32,9 +32,8 @@ coverage-html:
 # Run integration tests (requires Docker)
 test-integration:
 	@mkdir -p build
-	@echo "Running integration tests (requires Docker)..."
-	@echo "If you see permission errors, see tests/README.md for setup"
-	@go test -v -tags=integration -timeout=5m ./tests/... 2>&1 | tee build/integration_test.log
+	@go test -c -tags=integration -o build/integration_tests.test ./integration_tests
+	@build/integration_tests.test -test.v -test.timeout=5m 2>&1 | tee build/integration_test.log
 	@echo "\nIntegration test log saved to build/integration_test.log"
 
 # Run all tests (unit + integration)
