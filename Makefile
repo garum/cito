@@ -1,4 +1,4 @@
-.PHONY: build run test test-coverage test-integration clean help
+.PHONY: build run test test-coverage test-integration clean help dev-up dev-down dev-reset
 
 # Build the application
 build:
@@ -7,11 +7,10 @@ build:
 	@echo "Built binary: build/cito"
 
 # Build and run the application
-run: 
+run: dev-up
 	@mkdir -p build
 	@go build -o build/cito ./server
-	@echo "Built binary: build/cito"
-	@./env.sh && build/cito
+	@. ./env.sh && ./build/cito
 
 # Run all unit tests
 test:
@@ -44,6 +43,21 @@ clean:
 	@rm -rf build/
 	@echo "Cleaned build folder"
 
+# Start dev database
+dev-up:
+	@docker compose up -d
+	@echo "PostgreSQL running on localhost:5442"
+
+# Stop dev database
+dev-down:
+	@docker compose down
+
+# Reset dev database (destroys all data)
+dev-reset:
+	@docker compose down -v
+	@docker compose up -d
+	@echo "Database reset"
+
 # Show help
 help:
 	@echo "Available targets:"
@@ -54,4 +68,7 @@ help:
 	@echo "  test-integration - Run integration tests (requires Docker)"
 	@echo "  test-all         - Run all tests (unit + integration)"
 	@echo "  clean            - Remove build artifacts"
+	@echo "  dev-up           - Start dev PostgreSQL container"
+	@echo "  dev-down         - Stop dev PostgreSQL container"
+	@echo "  dev-reset        - Reset dev database (destroys data)"
 	@echo "  help             - Show this help message"

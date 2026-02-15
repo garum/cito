@@ -7,6 +7,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -125,13 +126,69 @@ func (app *App) fetchGitHubUser(accessToken string) (*model.GitHubUser, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to read response body: %w", err)
 	}
-
+	slog.Info("client body gh:", "body", body)
 	var githubUser model.GitHubUser
 	if err := json.Unmarshal(body, &githubUser); err != nil {
 		return nil, fmt.Errorf("failed to parse GitHub user: %w", err)
 	}
 
+	if githubUser.Email == "" {
+		githubUser.Email, err = app.fetchGitHubUserEmail(accessToken)
+		if err != nil {
+			return nil, fmt.Errorf("failed to fetch Email: %w", err)
+		}
+	}
+
 	return &githubUser, nil
+}
+
+func (app *App) fetchGitHubUserEmail(accessToken string) (string, error) {
+	req, err := http.NewRequest("GET", "https://api.github.com/user/emails", nil)
+	if err != nil {
+		return "", fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Add("Authorization", "Bearer "+accessToken)
+
+	httpClient := app.httpClient
+	if httpClient == nil {
+		httpClient = &http.Client{}
+	}
+
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("failed to fetch user info: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("GitHub API returned status %d", resp.StatusCode)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("failed to read response body: %w", err)
+	}
+	slog.Info("client eamil body gh:", "email", body)
+	type Email struct {
+		Email   string `json:"email"`
+		Primary bool   `json:"primary"`
+	}
+	var emails []Email
+
+	if err := json.Unmarshal(body, &emails); err != nil {
+		return "", fmt.Errorf("failed to parse GitHub emails: %w", err)
+
+	}
+	slog.Info("client emails unmarsh body gh:", "emails", emails)
+
+	for _, email := range emails {
+		if email.Primary == true {
+			return email.Email, nil
+		}
+	}
+	return "", errors.New("No email found")
+
 }
 
 func (app *App) callBackHandler(w http.ResponseWriter, r *http.Request) {
@@ -176,8 +233,15 @@ func (app *App) callBackHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (app *App) RegisterRoutes(handler *http.ServeMux) {
+
+	checkAuthMiddleware := middleware.MakeAuthMiddleware(app.userService)
+
+	// public
 	handler.HandleFunc("/ws", app.handler)
+	// auth handlers
 	handler.Handle("/login", middleware.LoggingMiddleware(http.HandlerFunc(app.loginHandler)))
 	handler.Handle("/oauth2/callback", middleware.LoggingMiddleware(http.HandlerFunc(app.callBackHandler)))
-	handler.Handle("/", middleware.LoggingMiddleware(http.HandlerFunc(app.homeHandler)))
+
+	// secure handlers
+	handler.Handle("/", middleware.LoggingMiddleware(checkAuthMiddleware(http.HandlerFunc(app.homeHandler))))
 }

@@ -31,7 +31,6 @@ func (us *UserService) UpsertUser(githubUser model.GitHubUser, accessToken strin
 	if err != nil {
 		return "", err
 	}
-
 	query := `
 		INSERT INTO users (github_id, username, email, access_token, session_token)
 		VALUES ($1, $2, $3, $4, $5)

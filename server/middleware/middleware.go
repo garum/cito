@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"cito/server/service"
 	"log/slog"
 	"net/http"
 )
@@ -17,4 +18,30 @@ func LoggingMiddleware(next http.Handler) http.Handler {
 		// AFTER the handler runs
 		slog.Info("Response sent", "method", r.Method, "path", r.URL.Path)
 	})
+}
+
+func MakeAuthMiddleware(userService *service.UserService) func(next http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// Check for session cookie
+			cookie, err := r.Cookie("session_token")
+			if err != nil {
+				// No session cookie - show login link
+				http.Redirect(w, r, "/login", http.StatusMovedPermanently)
+				return
+			}
+
+			// Look up user by session token
+			user, err := userService.FindUserBySession(cookie.Value)
+			if err != nil || user == nil {
+				// Invalid session - show login link
+				slog.Warn("Invalid session", "error", err)
+				http.Redirect(w, r, "/login", http.StatusMovedPermanently)
+				return
+			}
+			slog.Info("Auth check success")
+
+			next.ServeHTTP(w, r)
+		})
+	}
 }
