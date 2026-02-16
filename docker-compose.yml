@@ -1,0 +1,14 @@
+services:
+  postgres:
+    image: postgres:15-alpine
+    ports:
+      - "5442:5432"
+    environment:
+      POSTGRES_DB: mydb
+      POSTGRES_USER: cito
+      POSTGRES_PASSWORD: cito
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+volumes:
+  pgdata:
