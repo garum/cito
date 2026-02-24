@@ -13,18 +13,22 @@ type OAuthHandler struct {
 	userService service.UserService
 }
 
-func (oauthHandler *OAuthHandler) loginHandler(w http.ResponseWriter, r *http.Request) {
+func NewOAuthHandler(authService *service.AuthService, userService *service.UserService) *OAuthHandler {
+	return &OAuthHandler{authService: *authService, userService: *userService}
+}
+
+func (oauthHandler *OAuthHandler) LoginHandler(w http.ResponseWriter, r *http.Request) {
 	slog.Info("login page")
-	url := oauthHandler.authService.OAuthConfig.AuthCodeURL("state")
+	url := oauthHandler.authService.GetLoginURL()
 	slog.Info("OAuth URL generated", "url", url)
 	html := fmt.Sprintf(`<a href="%s">Sign in with GitHub</a>`, url)
 	w.Write([]byte(html))
 }
 
-func (oauthHandler *OAuthHandler) callBackHandler(w http.ResponseWriter, r *http.Request) {
+func (oauthHandler *OAuthHandler) CallBackHandler(w http.ResponseWriter, r *http.Request) {
 	code := r.URL.Query().Get("code")
 	slog.Info("OAuth callback received", "code", code)
-	tok, err := as.oauthConfig.Exchange(context.TODO(), code)
+	tok, err := oauthHandler.authService.GetGHToken(context.TODO(), code)
 	if err != nil {
 		slog.Error("OAuth exchange error", "error", err)
 		w.WriteHeader(http.StatusInternalServerError)
@@ -32,7 +36,7 @@ func (oauthHandler *OAuthHandler) callBackHandler(w http.ResponseWriter, r *http
 	}
 
 	// Fetch GitHub user information
-	githubUser, err := fetchGitHubUser(tok.AccessToken)
+	githubUser, err := oauthHandler.authService.FetchGitHubUser(tok.AccessToken)
 	if err != nil {
 		slog.Error("Failed to fetch GitHub user", "error", err)
 		w.WriteHeader(http.StatusInternalServerError)
@@ -42,7 +46,7 @@ func (oauthHandler *OAuthHandler) callBackHandler(w http.ResponseWriter, r *http
 	slog.Info("GitHub user authenticated", "id", githubUser.ID, "login", githubUser.Login, "email", githubUser.Email)
 
 	// Upsert user and get session token
-	sessionToken, err := userService.UpsertUser(*githubUser, tok.AccessToken)
+	sessionToken, err := oauthHandler.userService.UpsertUser(*githubUser, tok.AccessToken)
 	if err != nil {
 		slog.Error("Failed to upsert user", "error", err)
 		w.WriteHeader(http.StatusInternalServerError)

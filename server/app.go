@@ -1,12 +1,11 @@
 package main
 
 import (
+	"cito/server/handler"
 	"cito/server/middleware"
 	"cito/server/service"
 	"database/sql"
 	"net/http"
-
-	"github.com/gorilla/websocket"
 )
 
 // HTTPClient interface for making HTTP requests (enables mocking)
@@ -15,27 +14,35 @@ type HTTPClient interface {
 }
 
 type App struct {
-	oauthConfig OAuth2TokenExchanger
-	db          *sql.DB
-	userService *service.UserService
-	httpClient  HTTPClient
+	userService      *service.UserService
+	authService      *service.AuthService
+	oauthHandler     *handler.OAuthHandler
+	webSocketHandler *handler.WebSocketHandler
 }
 
-var upgrader = websocket.Upgrader{
-	ReadBufferSize:  1024,
-	WriteBufferSize: 1024,
+func NewApp(oauthConfig service.OAuth2TokenExchanger, db *sql.DB) *App {
+	userService := service.NewUserService(db)
+	authService := service.NewAuthService(oauthConfig, &http.Client{})
+	oauthHandler := handler.NewOAuthHandler(authService, userService)
+	webSocketHandler := handler.NewWebSocketHandler()
+	return &App{
+		userService:      userService,
+		authService:      authService,
+		oauthHandler:     oauthHandler,
+		webSocketHandler: webSocketHandler,
+	}
 }
 
-func (app *App) RegisterRoutes(handler *http.ServeMux) {
+func (app *App) RegisterRoutes(mux *http.ServeMux) {
 
 	checkAuthMiddleware := middleware.MakeAuthMiddleware(app.userService)
 
 	// public
-	handler.HandleFunc("/ws", app.handler)
+	mux.HandleFunc("/ws", app.webSocketHandler.Handler)
 	// auth handlers
-	handler.Handle("/login", middleware.LoggingMiddleware(http.HandlerFunc(app.loginHandler)))
-	handler.Handle("/oauth2/callback", middleware.LoggingMiddleware(http.HandlerFunc(app.callBackHandler)))
+	mux.Handle("/login", middleware.LoggingMiddleware(http.HandlerFunc(app.oauthHandler.LoginHandler)))
+	mux.Handle("/oauth2/callback", middleware.LoggingMiddleware(http.HandlerFunc(app.oauthHandler.CallBackHandler)))
 
 	// secure handlers
-	handler.Handle("/", middleware.LoggingMiddleware(checkAuthMiddleware(http.HandlerFunc(app.homeHandler))))
+	mux.Handle("/", middleware.LoggingMiddleware(checkAuthMiddleware(http.HandlerFunc(handler.HomeHandler))))
 }

@@ -77,3 +77,17 @@ func (m *MockUserService) FindUserBySession(sessionToken string) (interface{}, e
 	}
 	return nil, sql.ErrNoRows
 }
+
+// AuthService
+type MockAuthSerice struct {
+	GetLoginURLFunc func() string
+	GetGHTokenFunc  func(ctx context.Context, code string) (*oauth2.Token, error)
+}
+
+func (as *MockAuthSerice) GetLoginURL() string {
+	return "https://github.com/login/oauth/authorize?client_id=test&state=test"
+}
+
+func (as *MockAuthSerice) GetGHToken(ctx context.Context, code string) (*oauth2.Token, error) {
+	return &oauth2.Token{AccessToken: "mock_access_token"}, nil
+}

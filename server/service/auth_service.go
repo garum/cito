@@ -20,12 +20,23 @@ type OAuth2TokenExchanger interface {
 }
 
 type AuthService struct {
-	OAuthConfig  OAuth2TokenExchanger
-	httpClient   *http.Client
-	githubAPIURL string
+	oauthConfig OAuth2TokenExchanger
+	httpClient  *http.Client
 }
 
-func (as *AuthService) fetchGitHubUserEmail(accessToken string) (string, error) {
+func NewAuthService(oauthConfig OAuth2TokenExchanger, httpClient *http.Client) *AuthService {
+	return &AuthService{oauthConfig: oauthConfig, httpClient: httpClient}
+}
+
+func (as *AuthService) GetLoginURL() string {
+	return as.oauthConfig.AuthCodeURL("state")
+}
+
+func (as *AuthService) GetGHToken(ctx context.Context, code string) (*oauth2.Token, error) {
+	return as.oauthConfig.Exchange(ctx, code)
+}
+
+func (as *AuthService) FetchGitHubUserEmail(accessToken string) (string, error) {
 	req, err := http.NewRequest("GET", "https://api.github.com/user/emails", nil)
 	if err != nil {
 		return "", fmt.Errorf("failed to create request: %w", err)
@@ -75,7 +86,7 @@ func (as *AuthService) fetchGitHubUserEmail(accessToken string) (string, error) 
 }
 
 // fetchGitHubUser fetches user information from GitHub API
-func (as *AuthService) fetchGitHubUser(accessToken string) (*model.GitHubUser, error) {
+func (as *AuthService) FetchGitHubUser(accessToken string) (*model.GitHubUser, error) {
 
 	apiURL := "https://api.github.com/user"
 
@@ -112,7 +123,7 @@ func (as *AuthService) fetchGitHubUser(accessToken string) (*model.GitHubUser, e
 	}
 
 	if githubUser.Email == "" {
-		githubUser.Email, err = as.fetchGitHubUserEmail(accessToken)
+		githubUser.Email, err = as.FetchGitHubUserEmail(accessToken)
 		if err != nil {
 			return nil, fmt.Errorf("failed to fetch Email: %w", err)
 		}

@@ -1,7 +1,6 @@
 package main
 
 import (
-	"cito/server/service"
 	"database/sql"
 	"fmt"
 	"log/slog"
@@ -68,14 +67,7 @@ func main() {
 		RedirectURL: os.Getenv("GITHUB_REDIRECT_URL"),
 	}
 
-	userService := service.NewUserService(db)
-	app := &App{
-		oauthConfig:  conf,
-		db:           db,
-		userService:  userService,
-		httpClient:   &http.Client{},
-		githubAPIURL: "https://api.github.com/user",
-	}
+	app := NewApp(conf, db)
 
 	mux := http.NewServeMux()
 

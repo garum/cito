@@ -7,11 +7,20 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-type WebSocketService struct {
+type WebSocketHandler struct {
 	upgrader websocket.Upgrader
 }
 
-func (webSocketService *WebSocketService) handler(w http.ResponseWriter, r *http.Request) {
+func NewWebSocketHandler() *WebSocketHandler {
+	upgrader := websocket.Upgrader{
+		ReadBufferSize:  1024,
+		WriteBufferSize: 1024,
+	}
+
+	return &WebSocketHandler{upgrader: upgrader}
+}
+
+func (webSocketService *WebSocketHandler) Handler(w http.ResponseWriter, r *http.Request) {
 	conn, err := webSocketService.upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		slog.Error("WebSocket upgrade failed", "error", err)

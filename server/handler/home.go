@@ -7,11 +7,11 @@ import (
 	"net/http"
 )
 
-func homeHandler(w http.ResponseWriter, r *http.Request) {
+func HomeHandler(w http.ResponseWriter, r *http.Request) {
 	slog.Info("Home page accessed")
 	// User is logged in - show greeting
 	user, ok := model.GetUserValueFromContext(r.Context())
-	slog.Info("Ger Values ", "user", user, "ok", ok)
+	slog.Info("Get Values ", "user", user, "ok", ok)
 
 	if !ok {
 		slog.Info("redirect to login")
