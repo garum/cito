@@ -38,7 +38,7 @@ func (app *App) RegisterRoutes(mux *http.ServeMux) {
 	checkAuthMiddleware := middleware.MakeAuthMiddleware(app.userService)
 
 	// public
-	mux.HandleFunc("/ws", app.webSocketHandler.Handler)
+	mux.Handle("/ws", middleware.LoggingMiddleware(checkAuthMiddleware(http.HandlerFunc(app.webSocketHandler.Handler))))
 	// auth handlers
 	mux.Handle("/login", middleware.LoggingMiddleware(http.HandlerFunc(app.oauthHandler.LoginHandler)))
 	mux.Handle("/oauth2/callback", middleware.LoggingMiddleware(http.HandlerFunc(app.oauthHandler.CallBackHandler)))
